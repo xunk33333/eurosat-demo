@@ -15,6 +15,7 @@ def train():
     model = get_model(config).to(config.device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60], gamma=0.1)
     
     # Get data loaders
     train_loader, val_loader = get_eurosat_loaders(config)
@@ -77,6 +78,10 @@ def train():
         print(f"Epoch {epoch+1}/{config.num_epochs}")
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%")
         print(f"Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%")
+        print(f"Current LR: {optimizer.param_groups[0]['lr']:.6f}")
+        
+        # Update learning rate
+        scheduler.step()
         
         # Save best model
         if val_acc > best_val_acc:

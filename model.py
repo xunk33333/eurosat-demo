@@ -53,16 +53,17 @@ class TransformerEncoder(nn.Module):
 class ViTClassifier(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.patch_embed = PatchEmbedding(config)
-        self.encoder = nn.Sequential(*[
-            TransformerEncoder(config) for _ in range(config.vit_num_layers)
-        ])
-        self.classifier = nn.Linear(config.vit_embed_dim, config.num_classes)
+        import torchvision.models as models
+        
+        # Create torchvision ViT model
+        self.model = models.vit_b_16(pretrained=config.vit_pretrained)
+        
+        # Replace final classification head
+        in_features = self.model.heads.head.in_features
+        self.model.heads.head = nn.Linear(in_features, config.num_classes)
         
     def forward(self, x):
-        x = self.patch_embed(x)
-        x = self.encoder(x)
-        return self.classifier(x[:, 0])
+        return self.model(x)
 
 class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
@@ -101,53 +102,25 @@ class BasicBlock(nn.Module):
 class ResNetClassifier(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        block = BasicBlock
-        layers = {
-            'resnet18': [2, 2, 2, 2],
-            'resnet34': [3, 4, 6, 3],
-            'resnet50': [3, 4, 6, 3],
-            'resnet101': [3, 4, 23, 3],
-            'resnet152': [3, 8, 36, 3]
+        import torchvision.models as models
+        
+        # Create torchvision resnet model
+        model_fn = {
+            'resnet18': models.resnet18,
+            'resnet34': models.resnet34,
+            'resnet50': models.resnet50,
+            'resnet101': models.resnet101,
+            'resnet152': models.resnet152
         }[config.resnet_version]
         
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.model = model_fn(pretrained=config.resnet_pretrained)
         
-        self.layer1 = self._make_layer(block, 64, layers[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512, config.num_classes)
-        
-    def _make_layer(self, block, out_channels, blocks, stride):
-        layers = []
-        layers.append(block(self.in_channels, out_channels, stride))
-        self.in_channels = out_channels
-        for _ in range(1, blocks):
-            layers.append(block(out_channels, out_channels, stride=1))
-        return nn.Sequential(*layers)
+        # Replace final fully connected layer
+        in_features = self.model.fc.in_features
+        self.model.fc = nn.Linear(in_features, config.num_classes)
         
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-        
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
-        
-        return x
+        return self.model(x)
 
 def get_model(config: Config):
     if config.model_type == 'vit':
