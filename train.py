@@ -14,7 +14,24 @@ def train():
     # Initialize model and move to device
     model = get_model(config).to(config.device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    
+    # Fine-tuning setup
+    if config.fine_tune:
+        # Freeze backbone layers if needed
+        if config.freeze_backbone:
+            for name, param in model.named_parameters():
+                if 'fc' not in name and 'heads.head' not in name:  # Skip final classification layer
+                    param.requires_grad = False
+        
+        # Use fine-tuning learning rate
+        lr = config.fine_tune_lr
+        # Only optimize parameters that require gradients
+        params_to_optimize = filter(lambda p: p.requires_grad, model.parameters())
+    else:
+        lr = config.learning_rate
+        params_to_optimize = model.parameters()
+    
+    optimizer = optim.Adam(params_to_optimize, lr=lr)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60], gamma=0.1)
     
     # Get data loaders

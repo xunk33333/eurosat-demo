@@ -29,3 +29,6 @@ class Config:
     learning_rate: float = 1e-2
     num_epochs: int = 100
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    fine_tune: bool = False  # Whether to fine-tune the model
+    fine_tune_lr: float = 1e-4  # Learning rate for fine-tuning
+    freeze_backbone: bool = True  # Whether to freeze backbone layers during fine-tuning
